@@ -86,7 +86,7 @@
             <div v-if="showLineNumbers" class="line-numbers">
               <span v-for="lineNum in lineNumbers" :key="lineNum" class="line-number">{{ lineNum }}</span>
             </div>
-            <pre class="json-display"><code v-html="highlightedJson"></code></pre>
+            <pre class="json-display"><code><span v-for="(token, index) in highlightedJson" :key="index" :class="token.className">{{ token.text }}</span></code></pre>
           </div>
         </div>
         <div v-if="hasJsonError" class="json-error-message">
@@ -224,7 +224,7 @@ const totalNodes = computed(() => {
 });
 
 const highlightedJson = computed(() => {
-  if (!props.data) return "";
+  if (!props.data) return [];
 
   const jsonString = JSON.stringify(props.data, null, 2);
   return highlightJsonSyntax(jsonString);
@@ -480,13 +480,32 @@ const getValueType = (value: any): JsonNodeType["type"] => {
   return "string";
 };
 
-const highlightJsonSyntax = (json: string): string => {
-  return json
-    .replace(/("[\w\s]*")\s*:/g, '<span class="json-key">$1</span>:')
-    .replace(/:\s*(".*?")/g, ': <span class="json-string">$1</span>')
-    .replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>')
-    .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
-    .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>');
+const highlightJsonSyntax = (json: string): { text: string; className?: string }[] => {
+  const tokens: { text: string; className?: string }[] = [];
+  const tokenPattern = /"(?:\\.|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/g;
+  let position = 0;
+
+  for (const match of json.matchAll(tokenPattern)) {
+    const start = match.index!;
+    if (start > position) tokens.push({ text: json.slice(position, start) });
+
+    const text = match[0];
+    let className: string;
+    if (text.startsWith('"')) {
+      className = /^\s*:/.test(json.slice(start + text.length)) ? "json-key" : "json-string";
+    } else if (text === "true" || text === "false") {
+      className = "json-boolean";
+    } else if (text === "null") {
+      className = "json-null";
+    } else {
+      className = "json-number";
+    }
+    tokens.push({ text, className });
+    position = start + text.length;
+  }
+
+  if (position < json.length) tokens.push({ text: json.slice(position) });
+  return tokens;
 };
 
 const formatSize = (bytes: number): string => {
